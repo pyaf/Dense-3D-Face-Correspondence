@@ -300,7 +300,6 @@ def get_matching_keypoints(edge_keypoints, edge_features, edge_index):
     if len(matching_keypoints_list) == 0:
         return []
     # now we have those keypoints which are in vicinity of 2*rho, let's compute euclidean distance of their feature vectors
-    Kq = 2
     final_matched_keypoints = []
     for matched_keypoints in matching_keypoints_list: # select first list of matching keypoints
         # get the indices, get their corresponding features, compute euclidean distance
@@ -353,7 +352,7 @@ features = {} # key = edge + edge_index, value = list of features for each keypo
 # THRESHOLDS
 rho = 0.5
 eigen_ratio_threshold = 5000
-
+Kq = 10
 
 file_paths = {
     "path1": "F0001/F0001_AN01WH_F3D.wrl",

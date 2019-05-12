@@ -420,8 +420,10 @@ for iteration in range(num_iterations):
     print("Done | time taken: %0.4f seconds" % (time.time() - t5))
 
     print("Total new correspondences found: ", len(final_mean_keypoints))
-    print("Updating correspondence set")
+    print("Updating correspondence set...")
     correspondence_set = np.concatenate((correspondence_set, final_mean_keypoints), axis=0)
+    correspondence_set = np.unique(correspondence_set, axis=0)
+    print("Iteration completed in %0.4f seconds" % (time.time() - t1))
 
 
 
