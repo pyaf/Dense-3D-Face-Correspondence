@@ -14,7 +14,7 @@ os.environ["OMP_NUM_THREADS"] = "12"
 
 # In[2]:
 
-
+import json
 import pdb
 import numpy as np
 from collections import defaultdict
@@ -72,7 +72,7 @@ def get_data(file_path, var_name, mc):
     grid_z = griddata((x1, y1), z1, (grid_x, grid_y), method='linear')
     #grid_data[var_name] = [grid_x, grid_y, grid_z]
     #print(grid_x.shape, holder.shape)
-    mc.set("grid_%s" % var_name, [grid_x, grid_y, grid_z])
+    mc.set("grid_%s" % var_name, np.array([grid_x, grid_y, grid_z]))
     #print(var_name, "done")
 
 # ## Sparse Correspondence Initialization
@@ -139,8 +139,8 @@ def get_all_patches_for_face(mc, face_index, hull, triangles):
             if len(patch_list)==0:
                 #print("ALERT: NO PATCH FOR AN EDGE!!!!")
                 pass
-            all_patches.append(np.array(patch_list))
-    mc.set("face_patches%s" % str(face_index), all_patches)
+            all_patches.append(patch_list)
+    mc.set("face_patches%s" % str(face_index), np.array(all_patches))
     #for edge_index in range(len(all_patches)):
         #patches["edge" + str(edge_index)].append(all_patches[edge_index])
 
@@ -160,11 +160,13 @@ def update_patches(hull, triangles):
     for face_index in range(1, len(file_paths)+1):
         face_patches = mc.get("face_patches%s" % str(face_index))
         for edge_index in range(len(face_patches)):
-            patches["edge" + str(edge_index+1)].append(face_patches[edge_index])
+            patches["edge" + str(edge_index+1)].append(np.array(face_patches[edge_index]))
         #mc.delete("face_patches" + str(face_index))
     mc.flush_all()
     #print(time.time() - t)
+
     #pdb.set_trace()
+
 
 #****************************************************************************************#
 
@@ -189,11 +191,12 @@ def get_keypoints_from_patch(mc, edge_index):
     edge_keypoints = []
     for patch in edge_patches:
         #print(patch.shape)
-        if patch.shape[0]:
-            patch_keypoints = patch[np.apply_along_axis(is_keypoint, 1, patch, patch)] # keypoints in `patch`
+        if len(patch):
+            patch_keypoints = patch[np.apply_along_axis(is_keypoint, 1, patch, patch)].tolist() # keypoints in `patch`
         else:
             patch_keypoints = []
         edge_keypoints.append(patch_keypoints)
+    edge_keypoints = np.array(edge_keypoints)
     mc.set("keypoints_edge%s" % str(edge_index), edge_keypoints)
 
 
@@ -211,13 +214,19 @@ def update_keypoints():
             process.join()
 
     idx = len(patches)+1
-    steps = 4
+    steps = 12
     while idx>0:
         startidx = idx-steps if idx-steps>=1 else 1
         process_batch(startidx, idx)
         idx -= steps
 
-    keypoints = extract_from_mc(keypoints, mc, "edge", "keypoints_edge", 1, len(patches)+1, delete=False)
+    #keypoints = extract_from_mc(keypoints, mc, "edge", "keypoints_edge", 1, len(patches)+1, delete=False)
+    for idx in range(1, len(patches)+1):
+        kp_list = mc.get("keypoints_edge%s" % idx)
+        kp_list = [np.array(x) for x in kp_list]
+        keypoints["edge%s" % idx] = kp_list
+
+
     #pdb.set_trace()
 
 
@@ -266,7 +275,8 @@ def get_keypoint_features(keypoints, face_index):
         hu_moments = np.concatenate([xy_hu_moments, yz_hu_moments, xz_hu_moments])
         normal = get_normal(x, y, grid_x, grid_y, grid_z)
         if normal == "None": # array comparision raises ambiguity error, so None passed as string
-            continue
+            #continue
+            normal = [0, 0, 0]
         final_keypoints.append(point)
         point_features.extend(np.array([x, y, z])) # spatial location
         point_features.extend(normal)
@@ -287,13 +297,22 @@ def get_features(mc, edge_index):
             final_keypoints, keypoint_features = get_keypoint_features(edge_keypoints, face_index)
 
             # update the keypoint, remove unwanted keypoints like those on the edge etc
-            kp_list = mc.get("keypoints_edge%s" % str(edge_index))
-            kp_list[face_index-1] = final_keypoints
-            mc.set("keypoints_edge%s" % str(edge_index), kp_list)
+            #kp_list = mc.get("keypoints_edge%s" % str(edge_index))
+            #if len(final_keypoints) != len(kp_list[face_index-1]):
+                #print(final_keypoints.shape)
+                #print(len(final_keypoints), len(kp_list[face_index-1]))
+            #kp_list[face_index-1] = final_keypoints.tolist()
+            #print([type(x) for x in final_keypoints.tolist()])
+            #print(final_keypoints.tolist()[0])
+            #mc.replace("keypoints_edge%s" % str(edge_index), kp_list)
 
         except: # for no keypoints, no features
             keypoint_features = []
+        keypoint_features = [arr.tolist() for arr in keypoint_features]
+        #print([type(x) for x in keypoint_features])
         edgewise_keypoint_features.append(keypoint_features)
+    #print(np.asarray(edgewise_keypoint_features).shape)
+    #print([type(x) for x in edgewise_keypoint_features])
     mc.set("features_edge%s" % str(edge_index), edgewise_keypoint_features)
     #print(edge_index, len(edgewise_keypoint_features))
 
@@ -313,16 +332,20 @@ def update_features():
             process.join()
 
     idx = len(keypoints)+1
-    steps = 2
+    steps = 12
     while idx>0:
         startidx = idx-steps if idx-steps>=1 else 1
         process_batch(startidx, idx)
         idx -= steps
+        #break
+
+    for edge_index in range(1, len(keypoints)+1):
+        kp_features = mc.get("features_edge%s" % edge_index) # a list of lists
+        kp_features = [np.array(arr) for arr in kp_features] # each face has diff no. of kps
+        features["edge%s" % edge_index] = kp_features
 
     #pdb.set_trace()
-    features = extract_from_mc(features, mc, "edge", "features_edge", 1, len(keypoints)+1)
-    keypoints = extract_from_mc(keypoints, mc, "edge", "keypoints_edge", 1, len(patches)+1)
-    mc.flush_all()
+    #mc.flush_all()
 
 
 #**************************************************************************************
@@ -361,7 +384,7 @@ def get_matching_keypoints(edge_keypoints, edge_features, edge_index):
             if len(matched_keypoint_indices) == len(edge_keypoints): # there's a corresponding keypoint for each patch across all faces
                  matching_keypoints_list.append(matched_keypoint_indices)
     if len(matching_keypoints_list) == 0:
-        return []
+        return np.array([])
     # now we have those keypoints which are in vicinity of 2*rho, let's compute euclidean distance of their feature vectors
     final_matched_keypoints = []
     for matched_keypoints in matching_keypoints_list: # select first list of matching keypoints
@@ -376,7 +399,7 @@ def get_matching_keypoints(edge_keypoints, edge_features, edge_index):
         except:
             #pdb.set_trace()
             pass
-    return final_matched_keypoints
+    return np.array(final_matched_keypoints)
 
 
 def keypoint_matching_process(mc, edge_index):
@@ -386,7 +409,8 @@ def keypoint_matching_process(mc, edge_index):
     matched_keypoints = get_matching_keypoints(edge_keypoints, edge_features, edge_index)
     #if len(matched_keypoints):
         #new_keypoints.extend(matched_keypoints)
-    mc.set("new_keypoints%s" % str(edge_index), matched_keypoints)
+    #print(type(matched_keypoints))
+    mc.set("new_keypoints%s" % str(edge_index), matched_keypoints.tolist())
     #print(mc["new_keypoints" + str(edge_index)])
 
 
@@ -405,7 +429,7 @@ def keypoint_matching(keypoints, features):
             process.join()
 
     idx = len(keypoints)+1
-    steps = 4
+    steps = 12
     while idx>0:
         startidx = idx-steps if idx-steps>=1 else 1
         process_batch(startidx, idx)
@@ -429,7 +453,7 @@ def extract_from_mc(var, mc, str1, str2, fromidx, toidx, delete=False):
     # str2: reference string to use when extracting data from `mc`
     # fromidx, toidx: range of indices to loop over
     for index in range(fromidx, toidx):
-        var[str1 + str(index)] = mc.get(str2 + str(index))
+        var[str1 + str(index)] = np.array(mc.get(str2 + str(index)))
         if delete:
             #mc.delete(str2 + str(index))
             pass
@@ -463,11 +487,31 @@ file_paths = {
     "path10": "F0001/F0001_FE02WH_F3D.wrl",
     "path11": "F0001/F0001_FE03WH_F3D.wrl",
     "path12": "F0001/F0001_FE04WH_F3D.wrl",
-
 }
-#mc = pylibmc.Client(["127.0.0.1:1111"])#, binary=True, behaviors={"tcp_nodelay": True,"ketama": True})
+
+def json_serializer(key, value):
+    # if value is a list of np arrays, make sure to convert it to \
+    # np array too, .tolist() works all the subsequent arrays
+    if type(value) == np.ndarray:
+        value = value.tolist()
+    return json.dumps(value), 2
+
+def json_deserializer(key, value, flags):
+    #print('lol')
+    value = json.loads(value.decode('utf-8'))
+    #value = np.array(value)
+    #print(type(value))
+    #print(value.shape)
+    #if len(value.shape) == 1:
+        #pdb.set_trace()
+    return value
+
+mc = Client(('127.0.0.1', 1111), serializer=json_serializer, deserializer=json_deserializer)
+
+
+#mc = pylibmc.Client(["127.0.0.1:1111"], binary=True, behaviors={"tcp_nodelay": True,"ketama": True})
 #mc = pylibmc.Client(["127.0.0.1:1111
-mc = Client(('127.0.0.1', 1111))
+#mc = Client(('127.0.0.1', 1111))
 print("Reading faces...", end="", flush=True)
 t0 = time.time()
 
@@ -481,8 +525,10 @@ for process in processes:
     process.join()
 #t = time.time()
 # extrace face_points from cache
+
 face_points = extract_from_mc(face_points, mc, "face", "points_face", 1, len(file_paths)+1)
 grid_data = extract_from_mc(grid_data, mc, "face", "grid_face", 1, len(file_paths)+1)
+#pdb.set_trace()
 #for face_index in range(1, len(file_paths)+1):
 #    face_points["face%s" % face_index] = mc["points_face%s" % face_index]
 #    mc.delete("points_face%s" % face_index)

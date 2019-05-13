@@ -2,11 +2,10 @@
 # coding: utf-8
 
 # # Dense 3D Face Correspondence
-
-# import os
-# os.environ["MKL_NUM_THREADS"] = "1"
-# os.environ["NUMEXPR_NUM_THREADS"] = "1"
-# os.environ["OMP_NUM_THREADS"] = "1"
+import os
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -357,37 +356,36 @@ file_paths = {
     "path6": "F0001/F0001_DI02WH_F3D.wrl",
     "path7": "F0001/F0001_DI03WH_F3D.wrl",
     "path8": "F0001/F0001_DI04WH_F3D.wrl",
+    "path9": "F0001/F0001_FE01WH_F3D.wrl",
+    "path10": "F0001/F0001_FE02WH_F3D.wrl",
+    "path11": "F0001/F0001_FE03WH_F3D.wrl",
+    "path12": "F0001/F0001_FE04WH_F3D.wrl",
 }
-print("Reading face data of %d files............" % len(file_paths), end="", flush=True)
+
+print("Reading faces, prepapring normalized face data and grid data............ ", end="", flush=True)
+t0 = time.time()
 face_points = {} # key = face+index, value = extracted face data
 for i in range(1, len(file_paths)+1):
     face_points["face" + str(i)] = read_wrl(file_paths["path" + str(i)])
-print("Done")
+
 # normalizing the faces and interpolating them across a grid
-print("Prepapring normalized face data and grid data............ ", end="", flush=True)
 grid_data = {}
 for i in range(1, len(file_paths)+1):
     # normalization
     face_points["face" + str(i)] = normalize_face(face_points["face" + str(i)])
     # grid interpolation of the face data
     grid_data["face" + str(i)] = points2grid(face_points["face" + str(i)])
-print("Done")
+
+print("Done | time taken: %0.4f seconds" % (time.time() - t0))
+
 print("Extracting mean 2D Convex hull...........", end="", flush=True)
 hull = np.zeros([73, 3])
 for i in range(1, len(file_paths)+1):
     hull += get_hull(face_points["face" + str(i)])
 hull = hull / len(file_paths)
 print("Done")
+
 print("Starting the iterative process............")
-
-#tri_hull = triangulation(hull)
-#patches = get_patches(hull)
-#keypoints = get_keypoints(patches)
-#features = get_features(keypoints)
-#final_mean_keypoints = keypoint_matching_process(keypoints, features)
-#print(final_mean_keypoints)
-#updated_hull = np.concatenate((hull, final_mean_keypoints), axis=0)
-
 
 # Start correspondence densification loop
 num_iterations = 10
