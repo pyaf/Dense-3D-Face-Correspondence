@@ -71,9 +71,7 @@ def get_data(file_path, var_name, mc):
     grid_x, grid_y = np.mgrid[np.amin(x1):np.amax(x1):0.5, np.amin(y1):np.amax(y1):0.5]
     grid_z = griddata((x1, y1), z1, (grid_x, grid_y), method='linear')
     #grid_data[var_name] = [grid_x, grid_y, grid_z]
-    #print(grid_x.shape, holder.shape)
     mc.set("grid_%s" % var_name, np.array([grid_x, grid_y, grid_z]))
-    #print(var_name, "done")
 
 # ## Sparse Correspondence Initialization
 
@@ -91,13 +89,31 @@ def hull72(points, nosex, nosey, nosez):
     return newhull
 
 
-def get_hull(points):
+def get_hull(mc, face_index):
+    points = face_points["face" + str(face_index)]
     maxind = np.argmax(points[:,2])
     # coordinates of nose, nosex = x coordinate of nose, similarly for nosey and nosez
     nosex = points[maxind,0]
     nosey = points[maxind,1]
     nosez = points[maxind,2]
     hull = np.array(hull72(points, nosex,nosey,nosez))
+    mc.set("hull_%s" % face_index, hull.tolist())
+
+
+def get_mean_hull():
+    processes = []
+    for i in range(1, len(file_paths)+1):
+        process = Process(target=get_hull, args=(mc, i))
+        processes.append(process)
+        process.start()
+
+    for process in processes:
+        process.join()
+    hull = np.zeros([73, 3])
+    for i in range(1, len(file_paths)+1):
+        hull += np.array(mc.get("hull_%s" % i))
+    mc.flush_all()
+    hull = hull / len(file_paths)
     return hull
 
 
@@ -214,19 +230,18 @@ def update_keypoints():
             process.join()
 
     idx = len(patches)+1
-    steps = 12
+    steps = 30
     while idx>0:
         startidx = idx-steps if idx-steps>=1 else 1
         process_batch(startidx, idx)
         idx -= steps
 
-    #keypoints = extract_from_mc(keypoints, mc, "edge", "keypoints_edge", 1, len(patches)+1, delete=False)
     for idx in range(1, len(patches)+1):
         kp_list = mc.get("keypoints_edge%s" % idx)
         kp_list = [np.array(x) for x in kp_list]
         keypoints["edge%s" % idx] = kp_list
 
-
+    mc.flush_all()
     #pdb.set_trace()
 
 
@@ -298,23 +313,14 @@ def get_features(mc, edge_index):
 
             # update the keypoint, remove unwanted keypoints like those on the edge etc
             #kp_list = mc.get("keypoints_edge%s" % str(edge_index))
-            #if len(final_keypoints) != len(kp_list[face_index-1]):
-                #print(final_keypoints.shape)
-                #print(len(final_keypoints), len(kp_list[face_index-1]))
             #kp_list[face_index-1] = final_keypoints.tolist()
-            #print([type(x) for x in final_keypoints.tolist()])
-            #print(final_keypoints.tolist()[0])
             #mc.replace("keypoints_edge%s" % str(edge_index), kp_list)
 
         except: # for no keypoints, no features
             keypoint_features = []
         keypoint_features = [arr.tolist() for arr in keypoint_features]
-        #print([type(x) for x in keypoint_features])
         edgewise_keypoint_features.append(keypoint_features)
-    #print(np.asarray(edgewise_keypoint_features).shape)
-    #print([type(x) for x in edgewise_keypoint_features])
     mc.set("features_edge%s" % str(edge_index), edgewise_keypoint_features)
-    #print(edge_index, len(edgewise_keypoint_features))
 
 
 
@@ -332,20 +338,18 @@ def update_features():
             process.join()
 
     idx = len(keypoints)+1
-    steps = 12
+    steps = 30
     while idx>0:
         startidx = idx-steps if idx-steps>=1 else 1
         process_batch(startidx, idx)
         idx -= steps
-        #break
 
     for edge_index in range(1, len(keypoints)+1):
         kp_features = mc.get("features_edge%s" % edge_index) # a list of lists
         kp_features = [np.array(arr) for arr in kp_features] # each face has diff no. of kps
         features["edge%s" % edge_index] = kp_features
 
-    #pdb.set_trace()
-    #mc.flush_all()
+    mc.flush_all()
 
 
 #**************************************************************************************
@@ -409,9 +413,7 @@ def keypoint_matching_process(mc, edge_index):
     matched_keypoints = get_matching_keypoints(edge_keypoints, edge_features, edge_index)
     #if len(matched_keypoints):
         #new_keypoints.extend(matched_keypoints)
-    #print(type(matched_keypoints))
     mc.set("new_keypoints%s" % str(edge_index), matched_keypoints.tolist())
-    #print(mc["new_keypoints" + str(edge_index)])
 
 
 # those keypoints which are in vicinity of 2*rho are considered for matching
@@ -429,7 +431,7 @@ def keypoint_matching(keypoints, features):
             process.join()
 
     idx = len(keypoints)+1
-    steps = 12
+    steps = 30
     while idx>0:
         startidx = idx-steps if idx-steps>=1 else 1
         process_batch(startidx, idx)
@@ -497,21 +499,10 @@ def json_serializer(key, value):
     return json.dumps(value), 2
 
 def json_deserializer(key, value, flags):
-    #print('lol')
     value = json.loads(value.decode('utf-8'))
-    #value = np.array(value)
-    #print(type(value))
-    #print(value.shape)
-    #if len(value.shape) == 1:
-        #pdb.set_trace()
     return value
 
 mc = Client(('127.0.0.1', 1111), serializer=json_serializer, deserializer=json_deserializer)
-
-
-#mc = pylibmc.Client(["127.0.0.1:1111"], binary=True, behaviors={"tcp_nodelay": True,"ketama": True})
-#mc = pylibmc.Client(["127.0.0.1:1111
-#mc = Client(('127.0.0.1', 1111))
 print("Reading faces...", end="", flush=True)
 t0 = time.time()
 
@@ -528,22 +519,9 @@ for process in processes:
 
 face_points = extract_from_mc(face_points, mc, "face", "points_face", 1, len(file_paths)+1)
 grid_data = extract_from_mc(grid_data, mc, "face", "grid_face", 1, len(file_paths)+1)
-#pdb.set_trace()
-#for face_index in range(1, len(file_paths)+1):
-#    face_points["face%s" % face_index] = mc["points_face%s" % face_index]
-#    mc.delete("points_face%s" % face_index)
-#print(time.time() - t)
-
 
 print("Done | time taken: %0.4f seconds" % (time.time() - t0))
-
-
-hull = np.zeros([73, 3])
-for i in range(1, len(file_paths)+1):
-    hull += get_hull(face_points["face" + str(i)])
-hull = hull / len(file_paths)
-
-correspondence_set = hull
+correspondence_set = get_mean_hull()
 
 # Start correspondence densification loop
 for iteration in range(num_iterations):
@@ -576,12 +554,13 @@ for iteration in range(num_iterations):
 
     if len(new_keypoints) == 0:
         print("No new keypoints found")
+        print("Iteration %s completed in %0.4f seconds" % (iteration, (time.time() - t1)))
         break
-
+    num_kps = len(correspondence_set)
     new_keypoints = np.unique(np.array(new_keypoints), axis=0)
-    print("Total new correspondences found: ", len(new_keypoints))
-    print("Updating correspondence set...")
     correspondence_set = np.concatenate((correspondence_set, new_keypoints), axis=0)
-    print("Iteration completed in %0.4f seconds" % (time.time() - t1))
+    print("Total new correspondences found: ", len(correspondence_set) - num_kps)
+    print("Correspondence set updated")
+    print("Iteration %s completed in %0.4f seconds" % (iteration, (time.time() - t1)))
 
 
