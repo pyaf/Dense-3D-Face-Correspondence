@@ -503,9 +503,8 @@ def json_deserializer(key, value, flags):
     return value
 
 mc = Client(('127.0.0.1', 1111), serializer=json_serializer, deserializer=json_deserializer)
-print("Reading faces...", end="", flush=True)
 t0 = time.time()
-
+print("Reading faces, normalizing face data and preparing grid data... ", end="", flush=True)
 processes = []
 for i in range(1,len(file_paths)+1):
     process = Process(target=get_data, args=(file_paths["path"+str(i)], "face"+str(i), mc))
@@ -521,8 +520,11 @@ face_points = extract_from_mc(face_points, mc, "face", "points_face", 1, len(fil
 grid_data = extract_from_mc(grid_data, mc, "face", "grid_face", 1, len(file_paths)+1)
 
 print("Done | time taken: %0.4f seconds" % (time.time() - t0))
+t = time.time()
+print("Extracting mean 2D Convex hull .........", end="", flush=True)
 correspondence_set = get_mean_hull()
-
+print("Done | time taken: %0.4f" % (time.time() - t))
+print("Starting iterative process..........")
 # Start correspondence densification loop
 for iteration in range(num_iterations):
     new_keypoints = []

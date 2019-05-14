@@ -362,7 +362,7 @@ file_paths = {
     "path12": "F0001/F0001_FE04WH_F3D.wrl",
 }
 
-print("Reading faces, prepapring normalized face data and grid data............ ", end="", flush=True)
+print("Reading faces, normalizing face data and preparing grid data... ", end="", flush=True)
 t0 = time.time()
 face_points = {} # key = face+index, value = extracted face data
 for i in range(1, len(file_paths)+1):
@@ -377,13 +377,13 @@ for i in range(1, len(file_paths)+1):
     grid_data["face" + str(i)] = points2grid(face_points["face" + str(i)])
 
 print("Done | time taken: %0.4f seconds" % (time.time() - t0))
-
+t = time.time()
 print("Extracting mean 2D Convex hull...........", end="", flush=True)
 hull = np.zeros([73, 3])
 for i in range(1, len(file_paths)+1):
     hull += get_hull(face_points["face" + str(i)])
 hull = hull / len(file_paths)
-print("Done")
+print("Done | time taken: %0.4f" % (time.time() - t))
 
 print("Starting the iterative process............")
 
@@ -391,7 +391,7 @@ print("Starting the iterative process............")
 num_iterations = 10
 correspondence_set = hull
 for iteration in range(num_iterations):
-    print("\n\nStarting iteration: ", iteration)
+    print("\nStarting iteration: ", iteration)
     t1 = time.time()
     print("Starting Delaunay triangulation............", end="", flush=True)
     tri_hull = triangulation(correspondence_set)
@@ -417,11 +417,17 @@ for iteration in range(num_iterations):
     final_mean_keypoints = keypoint_matching_process(keypoints, features)
     print("Done | time taken: %0.4f seconds" % (time.time() - t5))
 
-    print("Total new correspondences found: ", len(final_mean_keypoints))
-    print("Updating correspondence set...")
+    num_kps = len(correspondence_set)
     correspondence_set = np.concatenate((correspondence_set, final_mean_keypoints), axis=0)
     correspondence_set = np.unique(correspondence_set, axis=0)
-    print("Iteration completed in %0.4f seconds" % (time.time() - t1))
+    new_kps = len(correspondence_set) - num_kps
+    if new_kps == 0:
+        print("No new keypoints found")
+        print("Iteration %s completed in %0.4f seconds" % (iteration, (time.time() - t1)))
+        break
+    print("Total new correspondences found: ", new_kps)
+    print("Correspondence set updated")
+    print("Iteration %s completed in %0.4f seconds" % (iteration, (time.time() - t1)))
 
 
 
