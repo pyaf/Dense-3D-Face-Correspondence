@@ -2,7 +2,9 @@
 
 This repository contains serial and parallel implementation of an algorithm taken from [Dense 3D Face correspondence](https://ieeexplore.ieee.org/abstract/document/7973095) paper that automatically establishes dense correspondences between a large number of 3D faces. Starting from automatically detected sparse correspondences on the outer boundary of 3D faces, the algorithm triangulates existing correspondences and expands them iteratively by matching points of distinctive surface curvature along the triangle edges.
 
-![Dense 3D Correspondence block diagram](screenshots/algorithm.png)
+<img src="./screenshots/algorithm.png" width="65%" height="65%" />
+
+## Files:
 
 * `serial.py` contains serial implementation of the algorithm.
 * `serial.ipynb` contains serial implementation with 3D plots and visualizations.
@@ -18,6 +20,8 @@ This repository contains serial and parallel implementation of an algorithm take
 To know more about the implementation, refer to the original [Dense 3D Face Correspondence](https://ieeexplore.ieee.org/abstract/document/7973095) paper and the [report](https://docs.google.com/document/d/1_ZqUXhxQ7LuPAfbcRhzPF2yDY2vRiyeTPdZuQjAb520/) prepared for this project.
 
 ### Demo video:
+Click on the image below to play :)
+
 [![Demo](http://img.youtube.com/vi/xIXsnp6CdqI/0.jpg)](http://www.youtube.com/watch?v=xIXsnp6CdqI)
 
 
